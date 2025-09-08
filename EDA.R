@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(reshape2)
 library(patchwork)
+library(ggplot2)
 
 rm(list=ls())
 mouse_microbiome <- read.csv("microbiome_data.csv", row.names=1)
@@ -13,7 +14,6 @@ mouse_phyla <- mouse_metagenomics[, 1:6]
 mouse_species <- mouse_metagenomics[, 7:118]
 
 
-# repeat analysis
 
 # sample types
 table(mouse_meta$ovx_or_intact)
@@ -27,6 +27,8 @@ sample_type_count <- mouse_meta %>% group_by(ovx_or_intact, Rx) %>%
 # Visualize relative abundances of phyla
 mouse_phyla$Ovary <- mouse_meta$ovx_or_intact
 mouse_phyla$Arm <- mouse_meta$Rx
+mouse_phyla<- mouse_phyla %>% select(Ovary, Arm, everything())
+write.csv(mouse_phyla, "data/mouse_phyla.csv", row.names=FALSE)
 mouse_phyla_long <- reshape2::melt(mouse_phyla, id.vars=c("Arm", "Ovary"),
                          variable.name="Phyla")
 colnames(mouse_phyla_long)[4] <- "relabd"
@@ -50,8 +52,6 @@ phyla_plot <- ggplot(mouse_phyla_long, aes(x=Phyla, y=relabd, color=Type)) +
 
 
 
-##TODO: differential abundance analysis
-
 
 
 # colored bar for relative abundance of species
@@ -59,7 +59,8 @@ phyla_plot <- ggplot(mouse_phyla_long, aes(x=Phyla, y=relabd, color=Type)) +
 ## get prevalences
 prevalences <- colMeans(mouse_species > 0)
 prev_taxa <- names(which(prevalences >= 0.9)) # prevalent taxa with occurrence in at least 90% of all the samples
-mean_relabd <- colMeans(mouse_species[, prev_taxa]) |> sort(decreasing=T)
+mean_relabd <- colMeans(mouse_species[, prev_taxa])
+mean_relabd <- sort(mean_relabd, decreasing = T)
 sorted_taxa <- names(mean_relabd) # sort by mean relative abundance
 ## merge other taxa
 mouse_species_others <- mouse_species %>% select(-any_of(prev_taxa)) |> rowSums()
@@ -73,6 +74,8 @@ mouse_species_concise$Arm <- mouse_meta$Rx
 ## take mean of relative abundance grouped by treatment arm and ovary
 mouse_species_concise_mean <- mouse_species_concise %>% group_by(Arm, Ovary) %>%
     summarise_all(mean)
+write.csv(mouse_species_concise_mean, "data/mouse_species_mean.csv",
+          row.names=FALSE, quote=FALSE)
 mouse_species_concise_long <- reshape2::melt(mouse_species_concise_mean, id.vars=c("Arm", "Ovary"),
                                    variable.name="Taxa")
 
@@ -127,87 +130,21 @@ pcoa_analysis <- function(mydata){
 
 mouse_species <- mouse_metagenomics[, 7:118]
 
+pcoa_results <- pcoa_analysis(mouse_species)
+pcoa_df <- pcoa_results$coords
+pcoa_df$Type <- sprintf("%s_%s",
+                        mouse_meta$ovx_or_intact,
+                        mouse_meta$Rx)
+
+pcoa_plot_treatment_intact <- ggplot(pcoa_df, aes(x=V1, y=V2, color=Type)) +
+    geom_point(alpha=0.8, size=1.5) +
+    xlab(pcoa_results$title_x) +
+    ylab(pcoa_results$title_y) +
+    scale_color_manual(values=c("#45A2D8", "#B3AE00", "#333333", "#ef3F34")) +
+    theme_bw(base_size=10)+
+    ggtitle("MDS Plot based on Bray-curtis distance")
 
 
-## compare duavee treatment vs control for ovary-intact mice
-mouse_species_intact <- mouse_species[mouse_meta$ovx_or_intact == "intact", ]
-mouse_meta_intact <- mouse_meta %>% filter(ovx_or_intact == "intact")
-species_intact_pcoa <- pcoa_analysis(mouse_species_intact)
-intact_pcoa_df <- as.data.frame(species_intact_pcoa$coords)
-intact_pcoa_df$Treatment <- mouse_meta_intact$Rx
-permanova_treatment_intact <- adonis2(mouse_species_intact ~ mouse_meta_intact$Rx,
+permanova_result <- adonis2(mouse_species ~ mouse_meta$Rx+mouse_meta$ovx_or_intact+mouse_meta$Adipo,
                                       method = "bray", permutations = 999)
-pval <- permanova_treatment_intact$`Pr(>F)`[1]
-title_name <- sprintf("Duavee vs Control for Ovary-Intact Mice (p value %.2f)", pval)
-pcoa_plot_treatment_intact <- ggplot(intact_pcoa_df, aes(x=V1, y=V2, color=Treatment)) +
-    geom_point(alpha=0.8, size=1.5) +
-    xlab(species_intact_pcoa$title_x) +
-    ylab(species_intact_pcoa$title_y) +
-    scale_color_manual(values=c("#45A2D8", "#B3AE00")) +
-    theme_bw(base_size=8)+
-    ggtitle(title_name)
-
-
-## compare duavee treatment vs control for ovx mice
-mouse_species_ovx <- mouse_species[mouse_meta$ovx_or_intact == "ovx", ]
-mouse_meta_ovx <- mouse_meta %>% filter(ovx_or_intact == "ovx")
-species_ovx_pcoa <- pcoa_analysis(mouse_species_ovx)
-ovx_pcoa_df <- as.data.frame(species_ovx_pcoa$coords)
-ovx_pcoa_df$Treatment <- mouse_meta_ovx$Rx
-permanova_treatment_ovx <- adonis2(mouse_species_ovx ~ mouse_meta_ovx$Rx,
-                                      method = "bray", permutations = 999)
-pval <- permanova_treatment_ovx$`Pr(>F)`[1]
-title_name <- sprintf("Duavee vs Control for OVX Mice (p value %.2f)", pval)
-pcoa_plot_treatment_ovx <- ggplot(ovx_pcoa_df, aes(x=V1, y=V2, color=Treatment)) +
-    geom_point(alpha=0.8, size=1.5) +
-    xlab(species_ovx_pcoa$title_x) +
-    ylab(species_ovx_pcoa$title_y) +
-    scale_color_manual(values=c("#333333", "#ef3F34")) +
-    theme_bw(base_size=8)+
-    ggtitle(title_name)
-
-
-## Compare ovx over intact for the control group
-mouse_species_control <- mouse_species[mouse_meta$Rx == "control", ]
-mouse_meta_control <- mouse_meta %>% filter(Rx == "control")
-species_control_pcoa <- pcoa_analysis(mouse_species_control)
-control_pcoa_df <- as.data.frame(species_control_pcoa$coords)
-control_pcoa_df$Ovary <- mouse_meta_control$ovx_or_intact
-permanova_ovary_control <- adonis2(mouse_species_control ~ mouse_meta_control$ovx_or_intact,
-                                   method = "bray", permutations = 999)
-pval <- permanova_ovary_control$`Pr(>F)`[1]
-title_name <- sprintf("OVX vs Intact for Control Mice (p value %.2f)", pval)
-pcoa_plot_ovary_control <- ggplot(control_pcoa_df, aes(x=V1, y=V2, color=Ovary)) +
-    geom_point(alpha=0.8, size=1.5) +
-    xlab(species_control_pcoa$title_x) +
-    ylab(species_control_pcoa$title_y) +
-    scale_color_manual(values=c("#45A2D8", "#333333")) +
-    theme_bw(base_size=8)+
-    ggtitle(title_name)
-
-
-## compare ovx over intact for the duavee group
-mouse_species_duavee <- mouse_species[mouse_meta$Rx == "duavee", ]
-mouse_meta_duavee <- mouse_meta %>% filter(Rx == "duavee")
-species_duavee_pcoa <- pcoa_analysis(mouse_species_duavee)
-duavee_pcoa_df <- as.data.frame(species_duavee_pcoa$coords)
-duavee_pcoa_df$Ovary <- mouse_meta_duavee$ovx_or_intact
-permanova_ovary_duavee <- adonis2(mouse_species_duavee ~ mouse_meta_duavee$ovx_or_intact,
-                                   method = "bray", permutations = 999)
-pval <- permanova_ovary_duavee$`Pr(>F)`[1]
-title_name <- sprintf("OVX vs Intact for Duavee Mice (p value %.2f)", pval)
-pcoa_plot_ovary_duavee <- ggplot(duavee_pcoa_df, aes(x=V1, y=V2, color=Ovary)) +
-    geom_point(alpha=0.8, size=1.5) +
-    xlab(species_duavee_pcoa$title_x) +
-    ylab(species_duavee_pcoa$title_y) +
-    scale_color_manual(values=c("#B3AE00", "#ef3F34")) +
-    theme_bw(base_size=8)+
-    ggtitle(title_name)
-
-
-pcoa_plot_species <- wrap_plots(pcoa_plot_treatment_intact,
-                                pcoa_plot_treatment_ovx,
-                                pcoa_plot_ovary_control,
-                                pcoa_plot_ovary_duavee,
-                                ncol=2)
 
