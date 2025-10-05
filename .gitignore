@@ -7,3 +7,7 @@
 *.txt
 *.CEL
 *.xlsx
+logs/
+__pycache__/
+*.gmt
+
