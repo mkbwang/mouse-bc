@@ -6,7 +6,7 @@ library(ggplot2)
 library(ggrepel)
 
 rm(list=ls())
-mouse_microbiome <- read.csv("microbiome_data.csv", row.names=1)
+mouse_microbiome <- read.csv("data/microbiome/microbiome_data.csv", row.names=1)
 mouse_meta <- mouse_microbiome[, seq(1,3)]
 
 mouse_metagenomics <- mouse_microbiome[, -seq(1,3)]
