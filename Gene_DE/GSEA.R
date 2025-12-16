@@ -17,15 +17,9 @@ metadata_microarray_lean <- metadata_microarray[lean_mask, ]
 metadata_microarray_obese <- metadata_microarray[obese_mask, ]
 
 
-## load microbiome
-microbiome_data <- read.csv("data/microbiome/microbiome_data.csv", row.names=1)
-metadata_microbiome <- microbiome_data[, seq(1,3)]
-microbiome_assay <- microbiome_data[, -seq(1,9)]
 
-metadata_lean <- metadata_microarray_lean[intersect(rownames(metadata_microarray_lean),
-                                                    rownames(metadata_microbiome)), ]
-metadata_obese <- metadata_microarray_obese[intersect(rownames(metadata_microarray_obese),
-                                                     rownames(metadata_microbiome)), ]
+metadata_lean <- metadata_microarray_lean[rownames(metadata_microarray_lean), ]
+metadata_obese <- metadata_microarray_obese[rownames(metadata_microarray_obese), ]
 
 
 
@@ -51,12 +45,13 @@ library(limma)
 library(ggplot2)
 library(ggrepel)
 
-volcano_plot <- function(lm_result, unit=0.2, n_annot=10, label_col="Gene"){
+volcano_plot <- function(lm_result, unit=0.2, pval_cutoff=1e-3, label_col="Gene"){
 
     lm_result$highlight <- 0
-    lm_result$highlight[1:n_annot] <- 1
+    isannot <- lm_result$P.Value < pval_cutoff
+    lm_result$highlight[isannot] <- 1
     lm_result$label <- ""
-    lm_result$label[1:n_annot] <- lm_result[1:n_annot, label_col]
+    lm_result$label[isannot] <- lm_result[isannot, label_col]
 
     lm_result$highlight <- as.factor(lm_result$highlight)
     lm_result$neg10pval <- -log10(lm_result$P.Value)
@@ -97,9 +92,9 @@ lm_lean_result <- topTable(lm_lean, coef="DvsC", adjust="BH",
                            number=nrow(microarray_feature_hallmark))
 lm_lean_result$Gene <- microarray_feature_hallmark[rownames(lm_lean_result), "Gene"]
 lean_volcanoplot <- volcano_plot(lm_lean_result)
-write.csv(lm_lean_result, "data/microarray/DE/limma_lean_result.csv",
+write.csv(lm_lean_result, "Gene_DE/limma_lean_result.csv",
           quote=FALSE)
-ggsave(filename="data/microarray/DE/limma_lean_result.svg",
+ggsave(filename="Gene_DE/limma_lean_result.svg",
        plot=lean_volcanoplot,
        width=5, height=3.5)
 
@@ -114,9 +109,9 @@ lm_obese_result <- topTable(lm_obese, coef="DvsC", adjust="BH",
                            number=nrow(microarray_feature_hallmark))
 lm_obese_result$Gene <- microarray_feature_hallmark[rownames(lm_obese_result), "Gene"]
 obese_volcanoplot <- volcano_plot(lm_obese_result)
-write.csv(lm_obese_result, "data/microarray/DE/limma_obese_result.csv",
+write.csv(lm_obese_result, "Gene_DE/limma_obese_result.csv",
           quote=FALSE)
-ggsave(filename="data/microarray/DE/limma_obese_result.svg",
+ggsave(filename="Gene_DE/limma_obese_result.svg",
        plot=obese_volcanoplot,
        width=5, height=3.5)
 
@@ -144,9 +139,9 @@ lean_gsea <- data.frame(Pathway=gsub("HALLMARK_", "", fgseaRes_lean$pathway),
                         logFC=fgseaRes_lean$NES) %>% arrange(P.Value)
 lean_gsea_volcano <- volcano_plot(lm_result=lean_gsea, unit=0.5, label_col="Pathway")
 lean_gsea$logFC <- NULL
-write.csv(lean_gsea, "data/microarray/DE/gsea_lean_result.csv",
+write.csv(lean_gsea, "Gene_DE/gsea_lean_result.csv",
           row.names=FALSE, quote=FALSE)
-ggsave(filename="data/microarray/DE/lean_gsea_result.svg",
+ggsave(filename="Gene_DE/lean_gsea_result.svg",
        plot=lean_gsea_volcano,
        width=5, height=3.5)
 
@@ -170,9 +165,9 @@ obese_gsea <- data.frame(Pathway=gsub("HALLMARK_", "", fgseaRes_obese$pathway),
                         logFC=fgseaRes_obese$NES) %>% arrange(P.Value)
 obese_gsea_volcano <- volcano_plot(lm_result=obese_gsea, unit=0.5, label_col="Pathway")
 obese_gsea$logFC <- NULL
-write.csv(obese_gsea, "data/microarray/DE/gsea_obese_result.csv",
+write.csv(obese_gsea, "Gene_DE/gsea_obese_result.csv",
           row.names=FALSE, quote=FALSE)
-ggsave(filename="data/microarray/DE/obese_gsea_result.svg",
+ggsave(filename="Gene_DE/obese_gsea_result.svg",
        plot=obese_gsea_volcano,
        width=5, height=3.5)
 
